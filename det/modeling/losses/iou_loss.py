@@ -14,14 +14,15 @@ from det.modeling.bbox_utils import bbox_iou
 
 class IouLoss(object):
     """
-    iou loss, see https://arxiv.org/abs/1908.03851
-    loss = 1.0 - iou * iou
-    Args:
-        loss_weight (float): iou loss weight, default is 2.5
-        max_height (int): max height of input to support random shape input
-        max_width (int): max width of input to support random shape input
-        ciou_term (bool): whether to add ciou_term
-        loss_square (bool): whether to square the iou term
+       IoU损失函数，参见 https://arxiv.org/abs/1908.03851
+       基本公式: loss = 1.0 - iou * iou (当loss_square=True时) 或 loss = 1 - iou (当loss_square=False时)
+
+       参数:
+           loss_weight (float): IoU损失权重，默认为2.5
+           giou (bool): 是否使用GIoU (Generalized IoU)，默认为False
+           diou (bool): 是否使用DIoU (Distance IoU)，默认为False
+           ciou (bool): 是否使用CIoU (Complete IoU)，默认为False
+           loss_square (bool): 是否对IoU项进行平方运算，默认为True
     """
 
     def __init__(self,
