@@ -11,6 +11,8 @@ import torch
 
 from det.modeling.bbox_utils import bbox_iou
 
+__all__ = ['IouLoss', 'GIoULoss', 'DIouLoss', 'SIoULoss']
+
 
 class IouLoss(object):
     """
