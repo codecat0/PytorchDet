@@ -551,21 +551,88 @@ def check_points_in_rotated_boxes(points, boxes):
 
 
 def rbox_iou(g, p):
+    """
+    计算两个多边形集合之间的IoU矩阵。
+
+    该函数计算集合g中的每个四边形与集合p中每个四边形的IoU。
+    输入是两个包含多边形顶点坐标的数组，输出是IoU矩阵。
+
+    Args:
+        g (list or numpy.ndarray): 第一个集合的多边形顶点坐标，形状为 [N, 8]。
+                                   每行格式为 [x1, y1, x2, y2, x3, y3, x4, y4]。
+        p (list or numpy.ndarray): 第二个集合的多边形顶点坐标，形状为 [M, 8]。
+                                   每行格式为 [x1, y1, x2, y2, x3, y3, x4, y4]。
+
+    Returns:
+        torch.Tensor: 形状为 [N, M] 的IoU矩阵，其中 iou_matrix[i, j] 表示
+                       g[i] 与 p[j] 之间的IoU值。
+    """
     from shapely.geometry import Polygon
-    g = np.array(g)
-    p = np.array(p)
-    g = Polygon(g[:8].reshape((4, 2)))
-    p = Polygon(p[:8].reshape((4, 2)))
-    g = g.buffer(0)
-    p = p.buffer(0)
-    if not g.is_valid or not p.is_valid:
-        return 0
-    inter = Polygon(g).intersection(Polygon(p)).area
-    union = g.area + p.area - inter
-    if union == 0:
-        return 0
-    else:
-        return inter / union
+
+    # 确保输入是 numpy 数组
+    g = np.array(g) # 形状 [N, 8]
+    p = np.array(p) # 形状 [M, 8]
+
+    N = g.shape[0]
+    M = p.shape[0]
+
+    # 初始化输出矩阵
+    iou_matrix = np.zeros((N, M), dtype=np.float32)
+
+    # 遍历所有 g 中的多边形
+    for i in range(N):
+        # 将 g[i] 转换为 Shapely Polygon
+        g_poly_coords = g[i, :8].reshape((4, 2))
+        g_poly = Polygon(g_poly_coords)
+        g_poly = g_poly.buffer(0) # 尝试修复无效几何体
+
+        # 如果 g_poly 无效，其与所有 p[j] 的 IoU 都是 0，跳过内层循环
+        if not g_poly.is_valid:
+            continue
+
+        # 预计算 g_poly 的面积
+        g_area = g_poly.area
+        if g_area == 0:
+            # 如果 g_poly 面积为0，其与所有 p[j] 的 IoU 都是 0
+            continue # iou_matrix[i, :] 已经是 0
+
+        # 遍历所有 p 中的多边形
+        for j in range(M):
+            # 将 p[j] 转换为 Shapely Polygon
+            p_poly_coords = p[j, :8].reshape((4, 2))
+            p_poly = Polygon(p_poly_coords)
+            p_poly = p_poly.buffer(0) # 尝试修复无效几何体
+
+            # 检查 p_poly 是否有效
+            if not p_poly.is_valid:
+                continue # iou_matrix[i, j] 默认为 0
+
+            # 预计算 p_poly 的面积
+            p_area = p_poly.area
+            if p_area == 0:
+                # 如果 p_poly 面积为0，IoU 为 0
+                continue # iou_matrix[i, j] 默认为 0
+
+            # 计算交集面积
+            try:
+                intersection_area = g_poly.intersection(p_poly).area
+            except Exception:
+                # 如果交集计算失败（例如拓扑错误），IoU 为 0
+                continue # iou_matrix[i, j] 默认为 0
+
+            # 计算并集面积
+            union_area = g_area + p_area - intersection_area
+
+            # 如果并集面积为0（理论上只有当g和p都面积为0且完全重合才可能，但上面已排除面积为0的情况）
+            # 或者由于浮点误差 union_area <= 0
+            if union_area <= 0:
+                iou_matrix[i, j] = 0.0
+            else:
+                # 计算并存储 IoU
+                iou_matrix[i, j] = intersection_area / union_area
+
+    iou_matrix = torch.from_numpy(iou_matrix)
+    return iou_matrix
 
 
 def rotated_iou_similarity(box1, box2, eps=1e-9, func=''):
@@ -596,6 +663,10 @@ def rotated_iou_similarity(box1, box2, eps=1e-9, func=''):
     for b1, b2 in zip(box1, box2):
         # b1: [M1, 5], b2: [M2, 5]
         # 调用外部函数计算 b1 和 b2 之间的IoU，期望输出形状为 [M1, M2]
+        b1 = b1.detach().cpu().numpy()
+        b2 = b2.detach().cpu().numpy()
+        b1 = rbox2poly_np(b1)
+        b2 = rbox2poly_np(b2)
         iou_result = rbox_iou(b1, b2)
         rotated_ious.append(iou_result)
 
