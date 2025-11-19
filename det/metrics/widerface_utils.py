@@ -14,9 +14,6 @@ import torch
 from loguru import logger
 
 
-__all__ = ['face_eval_run', 'lmk2out']
-
-
 def face_eval_run(model,
                   image_dir,
                   gt_file,
