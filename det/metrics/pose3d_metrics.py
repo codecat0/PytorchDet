@@ -13,6 +13,8 @@ from collections import defaultdict, OrderedDict
 import numpy as np
 from loguru import logger
 
+__all__ = ['Pose3DEval']
+
 
 class AverageMeter(object):
     def __init__(self):
