@@ -690,3 +690,48 @@ def voc_ap(rec, prec):
     # 计算面积：(\Delta 召回率) * 精确率
     ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
+
+
+def image_eval(pred, gt, ignore, iou_thresh):
+    """
+    单张图像评估函数
+
+    Args:
+        pred: 预测结果，Nx5形状，包含[xmin, ymin, xmax, ymax, score]
+        gt: 真实标签，Nx4形状，包含[xmin, ymin, width, height]
+        ignore: 忽略区域标记
+        iou_thresh: IOU阈值
+
+    Returns:
+        pred_recall: 预测召回率数组
+        proposal_list: 提案列表
+    """
+    _pred = pred.copy()
+    _gt = gt.copy()
+    pred_recall = np.zeros(_pred.shape[0])
+    recall_list = np.zeros(_gt.shape[0])
+    proposal_list = np.ones(_pred.shape[0])
+
+    # 将gt的[xmin, ymin, width, height]格式转换为[xmin, ymin, xmax, ymax]
+    _gt[:, 2] = _gt[:, 2] + _gt[:, 0]
+    _gt[:, 3] = _gt[:, 3] + _gt[:, 1]
+
+    # 计算预测框与真实框的IOU
+    overlaps = bbox_overlaps(_pred[:, :4], _gt)
+
+    for h in range(_pred.shape[0]):
+        gt_overlap = overlaps[h]
+        max_overlap, max_idx = gt_overlap.max(), gt_overlap.argmax()
+
+        if max_overlap >= iou_thresh:
+            if ignore[max_idx] == 0:  # 如果该gt框被标记为忽略
+                recall_list[max_idx] = -1
+                proposal_list[h] = -1
+            elif recall_list[max_idx] == 0:  # 如果该gt框未被匹配过
+                recall_list[max_idx] = 1
+
+        # 统计已匹配的gt框数量
+        r_keep_index = np.where(recall_list == 1)[0]
+        pred_recall[h] = len(r_keep_index)
+
+    return pred_recall, proposal_list
