@@ -379,7 +379,7 @@ def save_model(model,
     if isinstance(model, torch.nn.Module):
         # 如果model是PyTorch模型实例，获取其状态字典
         model_state_dict = model.state_dict()
-        torch.save(model_state_dict, save_path + ".pth")  # 通常使用.pth扩展名
+        torch.save(model_state_dict, save_path + ".pth")
         best_model = model_state_dict
     else:
         # 如果model已经是状态字典
@@ -407,3 +407,146 @@ def save_model(model,
     torch.save(state_dict, save_path + ".opt.pth")  # 优化器状态通常用.opt.pth扩展名
 
     logger.info("Save checkpoint: {}".format(save_dir))
+
+
+def save_semi_model(teacher_model, student_model, optimizer, save_dir,
+                    save_name, last_epoch, last_iter):
+    """
+    将教师模型和学生模型保存到磁盘。
+
+    Args:
+        teacher_model (dict): 教师模型的 state_dict，用于保存参数。
+        student_model (dict): 学生模型的 state_dict，用于保存参数。
+        optimizer (torch.optim.Optimizer): 优化器实例，用于保存优化器状态。
+        save_dir (str): 保存目录。
+        save_name (str): 保存文件的基础名称。
+        last_epoch (int): 当前 epoch 索引。
+        last_iter (int): 当前 iter 索引。
+    """
+    # 仅主进程（rank 0）执行保存操作
+    if torch.distributed.get_rank() != 0:
+        return
+
+    assert isinstance(teacher_model, dict), (
+        "teacher_model is not a instance of dict, "
+        "please call teacher_model.state_dict() to get.")
+    assert isinstance(student_model, dict), (
+        "student_model is not a instance of dict, "
+        "please call student_model.state_dict() to get.")
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    save_path = os.path.join(save_dir, save_name)
+
+    # 保存模型
+    torch.save(teacher_model, save_path + str(last_epoch) + "epoch_t.pth")
+    torch.save(student_model, save_path + str(last_epoch) + "epoch_s.pth")
+
+    # 保存优化器状态
+    state_dict = optimizer.state_dict()
+    state_dict['last_epoch'] = last_epoch
+    state_dict['last_iter'] = last_iter
+    torch.save(state_dict, save_path + str(last_epoch) + "epoch.opt.pth")
+    print("Save checkpoint: {}".format(save_dir))
+
+
+def save_model_info(model_info, save_path, prefix):
+    """
+    将模型信息保存到指定路径
+
+    Args:
+        model_info (dict): 要保存的模型信息字典
+        save_path (str): 保存目录路径
+        prefix (str): 文件名前缀
+    """
+    save_path = os.path.join(save_path, prefix)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    with open(os.path.join(save_path, f'{prefix}.info.json'), 'w') as f:
+        json.dump(model_info, f)
+    print("Already save model info in {}".format(save_path))
+
+
+def update_train_results(config,
+                         prefix,
+                         metric_info,
+                         done_flag=False,
+                         last_num=5,
+                         ema=False):
+    """
+    更新训练结果记录文件（train_result.json），用于保存模型、最优模型及最近几次 checkpoint 的信息。
+
+    Args:
+        config (dict): 配置字典，需包含保存路径等信息。
+        prefix (str): 当前保存模型的前缀（如 "epoch_10" 或 "best_model"）。
+        metric_info (dict): 包含评估指标的字典，至少包含 "metric" 字段。
+        done_flag (bool): 训练是否已完成。
+        last_num (int): 保留最近 last_num 个 checkpoint 的信息。
+        ema (bool): 是否使用 EMA（指数移动平均）模型。
+    """
+    # 仅主进程（rank 0）执行
+    if torch.distributed.get_rank() != 0:
+        return
+
+    assert last_num >= 1
+
+    # 定义训练结果文件路径
+    train_results_path = os.path.join(config["save_dir"], "train_result.json")
+
+    # 定义模型文件后缀标签
+    save_model_tag = ["pth", "opt.pth", "states"]
+    save_inference_tag = [
+        "inference_config", "pt", "pt", "pt.info"
+    ]
+    if ema:
+        save_model_tag.append("ema.pth")  # EMA 模型文件
+
+    # 读取已有训练结果或初始化
+    if os.path.exists(train_results_path):
+        with open(train_results_path, "r") as fp:
+            train_results = json.load(fp)
+    else:
+        train_results = {
+            "model_name": config.get("pdx_model_name", ""),
+            "label_dict": "",
+            "visualdl_log": "",
+            "train_log": "train.log",
+            "config": "config.yaml",
+            "models": {}
+        }
+        # 初始化 last_{1..last_num} 和 best
+        for i in range(1, last_num + 1):
+            train_results["models"][f"last_{i}"] = {}
+        train_results["models"]["best"] = {}
+
+    # 更新训练完成标志
+    train_results["done_flag"] = done_flag
+
+    # 判断是否为最优模型
+    if prefix == "best_model":
+        train_results["models"]["best"]["score"] = metric_info["metric"]
+        for tag in save_model_tag:
+            train_results["models"]["best"][tag] = os.path.join(
+                prefix, f"{prefix}.{tag.replace('ema.pth', 'ema.pth')}"
+            )
+        # 推理模型路径
+        for i, tag in enumerate(save_inference_tag):
+            filename = "inference.yml" if tag == "inference_config" else f"inference.{save_inference_tag[i] if save_inference_tag[i] != 'pt.info' else 'pt'}"
+            train_results["models"]["best"][tag] = os.path.join(prefix, "inference", filename)
+
+    else:
+        # 滚动更新 last checkpoints：last_1 ← 当前, last_2 ← last_1, ..., last_n ← last_{n-1}
+        for i in range(last_num - 1, 0, -1):
+            train_results["models"][f"last_{i + 1}"] = train_results["models"][f"last_{i}"].copy()
+
+        # 更新 last_1
+        train_results["models"][f"last_1"]["score"] = metric_info["metric"]
+        for tag in save_model_tag:
+            train_results["models"][f"last_1"][tag] = os.path.join(prefix, f"{prefix}.{tag}")
+        for i, tag in enumerate(save_inference_tag):
+            filename = "inference.yml" if tag == "inference_config" else f"inference.{save_inference_tag[i] if save_inference_tag[i] != 'pt.info' else 'pt'}"
+            train_results["models"][f"last_1"][tag] = os.path.join(prefix, "inference", filename)
+
+    # 保存更新后的结果
+    with open(train_results_path, "w") as fp:
+        json.dump(train_results, fp)
