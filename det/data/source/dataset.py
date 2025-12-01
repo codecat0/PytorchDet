@@ -291,7 +291,7 @@ class ImageFolder(DetDataset):
         self.image_dir = images
         self.roidbs = self._load_images(do_eval=do_eval)
 
-    def get_slice_images(self,
+    def set_slice_images(self,
                          images,
                          slice_size=[640, 640],
                          overlap_ratio=[0.25, 0.25]):
