@@ -70,6 +70,16 @@ class Trainer(object):
         self.use_master_grad = self.cfg.get('use_master_grad', False)
         self.uniform_output_enabled = self.cfg.get('uniform_output_enabled', False)
         log_ranks = self.cfg.get('log_ranks', '0')
+
+        if dist.is_initialized():
+            self._nranks = dist.get_world_size()
+            self._local_rank = dist.get_rank()
+            self._device = torch.device(f'cuda')
+        else:
+            self._nranks = 1
+            self._local_rank = 0
+            self._device = torch.device(f'cuda' if torch.cuda.is_available() else 'cpu')
+
         if isinstance(log_ranks, str):
             self.log_ranks = [int(rank) for rank in log_ranks.split(',')]
         elif isinstance(log_ranks, int):
@@ -135,13 +145,6 @@ class Trainer(object):
                 ema_black_list=ema_black_list,
                 ema_filter_no_grad=ema_filter_no_grad
             )
-
-        if dist.is_initialized():
-            self._nranks = dist.get_world_size()
-            self._local_rank = dist.get_rank()
-        else:
-            self._nranks = 1
-            self._local_rank = 0
 
         self.status = {}
         self.start_epoch = 0
@@ -363,7 +366,7 @@ class Trainer(object):
         if validate:
             self.cfg.eval_dataset = instantiate(self.cfg.eval_dataset)
 
-        model = self.model
+        model = self.model.to(self._device)
         sync_bn = (getattr(self.cfg, 'norm_type', None) == 'sync_bn' and self.cfg.use_gpu and self._nranks > 1)
         if sync_bn:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
