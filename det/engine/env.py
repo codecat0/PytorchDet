@@ -12,13 +12,6 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-
-import os
-import random
-import numpy as np
-import torch
-import torch.distributed as dist
-
 def init_parallel_env():
     """
     初始化分布式训练环境，并为每个 rank 设置独立的随机种子，
@@ -45,6 +38,7 @@ def init_parallel_env():
         if not dist.is_initialized():
             backend = 'nccl' if torch.cuda.is_available() else 'gloo'
             dist.init_process_group(backend=backend)
+            dist.barrier()
 
     else:
         random.seed(99)
@@ -52,6 +46,19 @@ def init_parallel_env():
         torch.manual_seed(99)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(99)
+
+def init_distributed_mode():
+    LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))
+    RANK = int(os.getenv('RANK', -1))
+    WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
+    if WORLD_SIZE > 1:
+        torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=WORLD_SIZE, rank=RANK)
+        torch.cuda.set_device(LOCAL_RANK)
+        torch.distributed.barrier()
+        if RANK == 0:
+            logger.info("Initialized distributed training with {} processes".format(WORLD_SIZE))
+    else:
+        logger.info("Initialized single-GPU training")
 
 
 def set_random_seed(seed):
