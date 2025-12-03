@@ -1,0 +1,49 @@
+num_classes: 1
+
+# Model
+backbone:
+  _target_: det.modeling.backbones.resnet.ResNet
+  depth: 50
+  norm_type: 'bn'
+  freeze_at: 0
+  return_idx: [3]
+  num_stages: 4
+  freeze_stem_only: True
+
+transformer:
+  _target_: det.modeling.transfomers.detr_transformer.DetrTransformer
+  num_queries: 100
+  position_embed_type: 'sine'
+  nhead: 8
+  hidden_dim: 256
+  num_encoder_layers: 6
+  num_decoder_layers: 6
+  dim_feedforward: 2048
+  dropout: 0.1
+  activation: 'relu'
+
+head:
+  _target_: det.modeling.heads.detr_head.DETRHead
+  num_classes: ${num_classes}
+  loss: ${loss}
+  num_mlp_layers: 3
+  hidden_dim: 256
+
+loss:
+  _target_: det.modeling.heads.detr_head.DETRLoss
+  num_classes: ${num_classes}
+  matcher: ${matcher}
+  loss_coeff:
+    class: 1
+    bbox: 5
+    giou: 2
+    no_object: 0.1
+  aux_loss: True
+
+matcher:
+  _target_: det.modeling.transformers.matchers.HungarianMatcher
+  matcher_coeff:
+    class: 1
+    bbox: 5
+    giou: 2
+
