@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 import numpy as np
 
-from det.modeling.losses import GIoULoss
+from det.modeling.losses.iou_loss import GIoULoss
 from det.modeling.transformers.utils import bbox_cxcywh_to_xyxy
 
 
