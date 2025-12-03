@@ -341,7 +341,7 @@ class DETRHead(nn.Module):
             out_transformer (Tuple):
                 (feats: [num_levels, batch_size, num_queries, hidden_dim],
                  memory: [batch_size, hidden_dim, h, w],
-                 src_proj: [batch_size, h*w, hidden_dim],
+                 src_proj: [batch_size, hidden_dim, h, w],
                  src_mask: [batch_size, 1, 1, h, w])
             body_feats (List[Tensor]): FPN特征列表 [[B, C, H, W]]
             inputs (dict, optional): 训练时的输入字典，包含ground truth信息
@@ -398,3 +398,44 @@ class DETRHead(nn.Module):
             # 推理模式：返回预测结果
             # 只返回最后一层的预测结果
             return (outputs_bbox[-1], outputs_logit[-1], outputs_seg)
+
+
+if __name__ == '__main__':
+    from det.modeling.losses.detr_loss import DETRLoss
+    from det.modeling.transformers.matchers import HungarianMatcher
+
+    matcher = HungarianMatcher(
+        matcher_coeff={
+            'class': 1,
+            'bbox': 5,
+            'giou': 2
+        }
+    )
+    loss = DETRLoss(
+        num_classes=1,
+        matcher=matcher,
+        loss_coeff={
+            'class': 1,
+            'bbox': 5,
+            'giou': 2,
+            'no_object': 0.1
+        },
+        aux_loss=True,
+    )
+    model = DETRHead(
+        num_classes=1,
+        loss=loss,
+        num_mlp_layers=3,
+        hidden_dim=256,
+    )
+    out_transformer = (
+        torch.randn((6, 1, 100, 256)),
+        torch.randn((1, 256, 25, 25)),
+        torch.randn((1, 256, 25, 25)),
+        torch.randn((1, 1, 1, 25, 25))
+    )
+    body_feats = [torch.randn((1, 2048, 25, 25))]
+    model.eval()
+    outs = model(out_transformer, body_feats)
+    for out in outs:
+        print(out.shape)
