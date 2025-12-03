@@ -41,7 +41,7 @@ def check_config(cfg):
         cfg: 修正后的配置（确保包含必要字段）
     """
     err = "'{}' not specified in config file. Please set it in config file."
-    check_list = ['architecture', 'num_classes']
+    check_list = ['num_classes']
 
     try:
         for var in check_list:
