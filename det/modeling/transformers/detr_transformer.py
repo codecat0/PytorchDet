@@ -500,7 +500,7 @@ if __name__ == '__main__':
         position_embed_type='sine',
         num_encoder_layers=6,
         num_decoder_layers=6,
-        hidden_dim=2048,
+        hidden_dim=256,
         nhead=8,
         dropout=0.1,
         activation='relu'
