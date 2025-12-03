@@ -13,7 +13,7 @@ from det.modeling.layers import MultiHeadAttention, _convert_attention_mask
 from det.modeling.transformers.position_encoding import PositionEmbedding
 from det.modeling.transformers.utils import _get_clones
 from det.modeling.initializer import conv_init_, linear_init_
-from torch.nn.init import xavier_normal_, normal_
+from torch.nn.init import xavier_normal_, normal_, xavier_uniform_
 
 __all__ = ['DETRTransformer']
 
@@ -492,3 +492,20 @@ class DETRTransformer(nn.Module):
         memory_reshaped = memory.transpose(1, 2).reshape([bs, c, h, w])  # [B, C, H, W]
 
         return output, memory_reshaped, src_proj, src_mask
+
+
+if __name__ == '__main__':
+    model = DETRTransformer(
+        num_queries=100,
+        position_embed_type='sine',
+        num_encoder_layers=6,
+        num_decoder_layers=6,
+        hidden_dim=2048,
+        nhead=8,
+        dropout=0.1,
+        activation='relu'
+    )
+    x = [torch.randn((1, 2048, 25, 25))]
+    outs = model(x)
+    for out in outs:
+        print(out.shape)

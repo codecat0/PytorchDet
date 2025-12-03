@@ -18,7 +18,7 @@ from torchvision.ops import DeformConv2d
 from det.modeling.bbox_utils import delta2bbox
 from det.modeling import ops
 from torch.nn.init import xavier_normal_, constant_, normal_, zeros_
-from torch.nn.init import xavier_uniform_ as XavierUniform
+from torch.nn.init import xavier_uniform_
 
 
 def _to_list(l):
