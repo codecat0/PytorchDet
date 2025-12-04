@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from copy import deepcopy
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler, RandomSampler
 from . import transform
 from .utils import default_collate_fn
 from loguru import logger
@@ -31,14 +31,11 @@ class Compose(object):
         """
         self.transforms = transforms
         self.transforms_cls = []
-        for t in self.transforms:
-            for k, v in t.items():
-                op_cls = getattr(transform, k)
-                f = op_cls(**v)
-                if hasattr(f, 'num_classes'):
-                    f.num_classes = num_classes
+        for f in self.transforms:
+            if hasattr(f, 'num_classes'):
+                f.num_classes = num_classes
 
-                self.transforms_cls.append(f)
+            self.transforms_cls.append(f)
 
     def _update_transforms_cls(self, data):
         if 'transform_schedulers' in data:
@@ -149,10 +146,16 @@ class BaseDataLoader(object):
         self.dataset.set_transform(self._sample_transforms)
         self.dataset.set_kwargs(**self.kwargs)
         if batch_sampler is None:
-            self._batch_sampler = DistributedSampler(
-                dataset,
-                shuffle=self.shuffle,
-                drop_last=self.drop_last)
+            if self._is_distributed():
+                self._batch_sampler = DistributedSampler(
+                    dataset,
+                    shuffle=self.shuffle,
+                    drop_last=self.drop_last)
+            else:
+                if self.shuffle:
+                    self._batch_sampler = RandomSampler(dataset)
+                else:
+                    self._batch_sampler = SequentialSampler(dataset)
         else:
             self._batch_sampler = batch_sampler
 
@@ -169,6 +172,14 @@ class BaseDataLoader(object):
         self.loader = iter(self.dataloader)
 
         return self
+
+    def _is_distributed(self):
+        """判断是否在分布式训练环境中"""
+        if not torch.distributed.is_available():
+            return False
+        if not torch.distributed.is_initialized():
+            return False
+        return True
 
     def __len__(self):
         return len(self.dataloader)
@@ -225,3 +236,65 @@ class TestReader(BaseDataLoader):
         super(TestReader, self).__init__(sample_transforms, batch_transforms,
                                          batch_size, shuffle, drop_last,
                                          num_classes, **kwargs)
+
+
+if __name__ == "__main__":
+    from det.data.source.coco import COCODataset
+    from det.data.transform.operators import Decode, RandomFlip, RandomSelect, \
+        RandomShortSideResize, RandomSizeCrop, \
+        NormalizeImage, NormalizeBox, BboxXYXY2XYWH, Permute
+    from det.data.transform.batch_operators import PadMaskBatch
+    from det.data.reader import TrainReader
+
+    dataset = COCODataset(
+        dataset_dir='/data0/helizhi/works/PytorchDet/data',
+        image_dir='train',
+        anno_path='annotations/instance_train.json',
+        data_fields=['image', 'gt_bbox', 'gt_class', 'is_crowd']
+    )
+
+    sample_transforms = [
+        Decode(),
+        RandomFlip(prob=0.5),
+        RandomSelect(
+            transforms1=[
+                RandomShortSideResize(
+                    short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                    max_size=1333,
+                )
+            ],
+            transforms2=[
+                RandomShortSideResize(short_side_sizes=[400, 500, 600]),
+                RandomSizeCrop(min_size=384, max_size=600),
+                RandomShortSideResize(
+                    short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                    max_size=1333,
+                )
+            ],
+        ),
+        NormalizeImage(
+            is_scale=True,
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        ),
+        NormalizeBox(),
+        BboxXYXY2XYWH(),
+        Permute()
+    ]
+
+    batch_transforms = [
+        PadMaskBatch(pad_to_stride=-1, return_pad_mask=True)
+    ]
+
+    train_loader = TrainReader(
+        sample_transforms=sample_transforms,
+        batch_transforms=batch_transforms,
+        batch_size=2,
+        shuffle=True,
+        drop_last=True,
+        collate_batch=False
+    )(dataset, worker_num=0)
+    for data in train_loader:
+        for key, value in data.items():
+            print('{}: {}'.format(key, value))
+        break
