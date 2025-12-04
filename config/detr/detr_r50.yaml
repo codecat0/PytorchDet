@@ -1,6 +1,10 @@
 num_classes: 1
 
 # Model
+hidden_dim: 256
+use_focal_loss: false
+with_mask: false
+
 backbone:
   _target_: det.modeling.backbones.resnet.ResNet
   depth: 50
@@ -15,7 +19,7 @@ transformer:
   num_queries: 100
   position_embed_type: 'sine'
   nhead: 8
-  hidden_dim: 256
+  hidden_dim: ${hidden_dim}
   num_encoder_layers: 6
   num_decoder_layers: 6
   dim_feedforward: 2048
@@ -27,10 +31,11 @@ head:
   num_classes: ${num_classes}
   loss: ${loss}
   num_mlp_layers: 3
-  hidden_dim: 256
+  hidden_dim: ${hidden_dim}
+  use_focal_loss: ${use_focal_loss}
 
 loss:
-  _target_: det.modeling.heads.detr_head.DETRLoss
+  _target_: det.modeling.losses.detr_loss.DETRLoss
   num_classes: ${num_classes}
   matcher: ${matcher}
   loss_coeff:
@@ -39,6 +44,7 @@ loss:
     giou: 2
     no_object: 0.1
   aux_loss: True
+  use_focal_loss: ${use_focal_loss}
 
 matcher:
   _target_: det.modeling.transformers.matchers.HungarianMatcher
@@ -46,4 +52,18 @@ matcher:
     class: 1
     bbox: 5
     giou: 2
+  with_mask: ${with_mask}
 
+post_process:
+  _target_: det.modeling.post_process.DETRPostProcess
+  num_classes: ${num_classes}
+  use_focal_loss: ${use_focal_loss}
+  with_mask: ${with_mask}
+
+model:
+  _target_: det.modeling.architectures.detr.DETR
+  backbone: ${backbone}
+  transformer: ${transformer}
+  detr_head: ${head}
+  post_process: ${post_process}
+  with_mask: ${with_mask}
