@@ -7,11 +7,13 @@
 """
 import os
 import copy
-from collections import Sequence
+from collections.abc import Sequence
 import numpy as np
-from loguru import logger
+from det.data.source.dataset import DetDataset
 
-from .dataset import DetDataset
+from det.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 __all__ = ['COCODataset']
@@ -247,3 +249,55 @@ class COCODataset(DetDataset):
             records += empty_records
         self.roidbs = records
 
+
+if __name__ == "__main__":
+    from det.data.transform.operators import Decode, RandomFlip, RandomSelect,\
+                        RandomShortSideResize, RandomSizeCrop,\
+                        NormalizeImage, NormalizeBox, BboxXYXY2XYWH, Permute
+    from det.data.reader import Compose
+
+    dataset = COCODataset(
+        dataset_dir='/data0/helizhi/works/PytorchDet/data',
+        image_dir='train',
+        anno_path='annotations/instance_train.json',
+        data_fields=['image', 'gt_bbox', 'gt_class', 'is_crowd']
+    )
+    
+    sample_transforms = Compose(
+        [
+            Decode(),
+            RandomFlip(prob=0.5),
+            RandomSelect(
+                transforms1=[
+                    RandomShortSideResize(
+                        short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                        max_size=1333,
+                    )
+                ],
+                transforms2=[
+                    RandomShortSideResize(short_side_sizes=[400, 500, 600]),
+                    RandomSizeCrop(min_size=384, max_size=600),
+                    RandomShortSideResize(
+                        short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                        max_size=1333,
+                    )
+                ]
+            ),
+            NormalizeImage(
+                is_scale=True,
+                mean=[0.485,0.456,0.406],
+                std=[0.229,0.224,0.225]
+            ),
+            NormalizeBox(),
+            BboxXYXY2XYWH(),
+            Permute()
+        ],
+        num_classes=1
+    )
+    
+    dataset.parse_dataset()
+    dataset.set_kwargs()
+    dataset.set_transform(sample_transforms)
+    print(len(dataset))
+    data = dataset[0]
+    print(data)
