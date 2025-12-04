@@ -12,6 +12,10 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
+from det.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
+
 def init_parallel_env():
     """
     初始化分布式训练环境，并为每个 rank 设置独立的随机种子，
