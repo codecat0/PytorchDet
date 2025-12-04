@@ -584,7 +584,7 @@ class DETRPostProcess(object):
         bbox_pred = bbox_cxcywh_to_xyxy(bboxes)
         # calculate the original shape of the image
         origin_shape = torch.floor(im_shape / scale_factor + 0.5)
-        img_h, img_w = origin_shape.split(2, dim=-1)
+        img_h, img_w = origin_shape.chunk(2, dim=-1)
         if self.bbox_decode_type == 'pad':
             # calculate the shape of the image with padding
             out_shape = pad_shape / im_shape * origin_shape
@@ -600,7 +600,7 @@ class DETRPostProcess(object):
             logits, dim=-1)[:, :, :-1]
 
         if not self.use_focal_loss:
-            scores, labels = torch.max(scores, -1), torch.argmax(scores, -1)
+            scores, labels = torch.max(scores, -1)
             if scores.shape[1] > self.num_top_queries:
                 scores, index = torch.topk(
                     scores, self.num_top_queries, dim=-1)
