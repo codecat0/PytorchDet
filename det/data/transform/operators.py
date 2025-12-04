@@ -5,7 +5,7 @@
 @Author :CodeCat
 @Date   :2025/11/6 9:50
 """
-from collections import Sequence
+from collections.abc import Sequence
 from numbers import Integral, Number
 
 import uuid
@@ -21,8 +21,8 @@ from pycocotools import mask
 import pickle
 import threading
 import torch
-
-from .op_helper import (satisfy_sample_constraint, filter_and_process,
+from det.data.reader import Compose
+from det.data.transform.op_helper import (satisfy_sample_constraint, filter_and_process,
                         generate_sample_bbox, clip_bbox, data_anchor_sampling,
                         satisfy_sample_constraint_coverage, crop_image_sampling,
                         generate_sample_bbox_square, bbox_area_sampling,
@@ -3295,8 +3295,12 @@ class RandomSizeCrop(BaseOperator):
         self.max_size = max_size
         self.keep_empty = keep_empty
 
-        from torchvision.transforms.functional import crop as torch_crop
-        self.torch_crop = torch_crop
+        # from torchvision.transforms.functional import crop as torch_crop
+        # self.torch_crop = torch_crop
+    
+    @staticmethod
+    def _crop(img, top, left, height, width):
+        return img[top:top+height, left:left+width]
 
     @staticmethod
     def get_crop_params(img_shape, output_size):
@@ -3355,7 +3359,7 @@ class RandomSizeCrop(BaseOperator):
                     sample['gt_areas'], keep_index, axis=0)
 
         image_shape = sample['image'].shape[:2]
-        sample['image'] = self.torch_crop(sample['image'], *region)
+        sample['image'] = self._crop(sample['image'], *region)
         sample['im_shape'] = np.array(
             sample['image'].shape[:2], dtype=np.float32)
 
