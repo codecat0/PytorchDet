@@ -8,7 +8,7 @@
 import torch
 import numbers
 import numpy as np
-from collections import Sequence, Mapping
+from collections.abc import Sequence, Mapping
 
 
 def default_collate_fn(batch):
