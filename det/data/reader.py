@@ -236,56 +236,56 @@ class TestReader(BaseDataLoader):
         super(TestReader, self).__init__(sample_transforms, batch_transforms,
                                          batch_size, shuffle, drop_last,
                                          num_classes, **kwargs)
-
-
+        
+        
 if __name__ == "__main__":
     from det.data.source.coco import COCODataset
-    from det.data.transform.operators import Decode, RandomFlip, RandomSelect, \
-        RandomShortSideResize, RandomSizeCrop, \
-        NormalizeImage, NormalizeBox, BboxXYXY2XYWH, Permute
+    from det.data.transform.operators import Decode, RandomFlip, RandomSelect,\
+                            RandomShortSideResize, RandomSizeCrop,\
+                            NormalizeImage, NormalizeBox, BboxXYXY2XYWH, Permute
     from det.data.transform.batch_operators import PadMaskBatch
     from det.data.reader import TrainReader
-
+    
     dataset = COCODataset(
         dataset_dir='/data0/helizhi/works/PytorchDet/data',
         image_dir='train',
         anno_path='annotations/instance_train.json',
         data_fields=['image', 'gt_bbox', 'gt_class', 'is_crowd']
     )
-
+    
     sample_transforms = [
-        Decode(),
-        RandomFlip(prob=0.5),
-        RandomSelect(
-            transforms1=[
-                RandomShortSideResize(
-                    short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
-                    max_size=1333,
-                )
-            ],
-            transforms2=[
-                RandomShortSideResize(short_side_sizes=[400, 500, 600]),
-                RandomSizeCrop(min_size=384, max_size=600),
-                RandomShortSideResize(
-                    short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
-                    max_size=1333,
-                )
-            ],
-        ),
-        NormalizeImage(
-            is_scale=True,
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        ),
-        NormalizeBox(),
-        BboxXYXY2XYWH(),
-        Permute()
-    ]
-
+            Decode(),
+            RandomFlip(prob=0.5),
+            RandomSelect(
+                transforms1=[
+                    RandomShortSideResize(
+                        short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                        max_size=1333,
+                    )
+                ],
+                transforms2=[
+                    RandomShortSideResize(short_side_sizes=[400, 500, 600]),
+                    RandomSizeCrop(min_size=384, max_size=600),
+                    RandomShortSideResize(
+                        short_side_sizes=[480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800],
+                        max_size=1333,
+                    )
+                ],
+            ),
+            NormalizeImage(
+                is_scale=True,
+                mean=[0.485,0.456,0.406],
+                std=[0.229,0.224,0.225]
+            ),
+            NormalizeBox(),
+            BboxXYXY2XYWH(),
+            Permute()
+        ]
+    
     batch_transforms = [
         PadMaskBatch(pad_to_stride=-1, return_pad_mask=True)
     ]
-
+    
     train_loader = TrainReader(
         sample_transforms=sample_transforms,
         batch_transforms=batch_transforms,
@@ -298,3 +298,13 @@ if __name__ == "__main__":
         for key, value in data.items():
             print('{}: {}'.format(key, value))
         break
+
+    # from omegaconf import OmegaConf
+    # from hydra.utils import instantiate
+    # cfg = OmegaConf.load('config/base/dataset/coco_dataloader.yaml')
+    # dataset = instantiate(cfg.dataset)
+    # dataloader = instantiate(cfg.dataloader, _convert_="all")(dataset, cfg.worker_num)
+    # for data in dataloader:
+    #     for key, value in data.items():
+    #         print('{}: {}'.format(key, value))
+    #     break
