@@ -301,3 +301,16 @@ if __name__ == "__main__":
     print(len(dataset))
     data = dataset[0]
     print(data)
+    
+    # from omegaconf import OmegaConf
+    # from hydra.utils import instantiate
+    # cfg = OmegaConf.load('config/base/dataset/coco_dataloader.yaml')
+    # dataset = instantiate(cfg.dataset)
+    # sample_transforms = instantiate(cfg.sample_transforms, _convert_="all")
+    # dataset.parse_dataset()
+    # dataset.set_kwargs()
+    # dataset.set_transform(sample_transforms)
+    # print(len(dataset))
+    # data = dataset[0]
+    # for key, value in data.items():
+    #     print(f"{key}: {value}")
