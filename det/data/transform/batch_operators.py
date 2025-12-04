@@ -6,7 +6,7 @@
 @Date   :2025/11/10 15:51
 """
 import typing
-from collections import Sequence
+from collections.abc import Sequence
 import cv2
 import copy
 import math
