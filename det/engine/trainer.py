@@ -100,7 +100,7 @@ class Trainer(object):
 
         if self.mode == 'train':
             self.dataset = instantiate(self.cfg.train_dataset)
-            self.loader = instantiate(self.cfg.train_loader)(self.dataset, cfg.worker_num)
+            self.loader = instantiate(self.cfg.train_loader, _convert_="all")(self.dataset, cfg.worker_num)
 
         self.model = instantiate(self.cfg.model)
 
@@ -112,7 +112,7 @@ class Trainer(object):
             )
             if cfg.metric == 'VOC':
                 self.cfg.eval_loader.collate_batch = False
-            self.loader = instantiate(self.cfg.eval_loader)(self.dataset, cfg.worker_num, self._eval_batch_sampler)
+            self.loader = instantiate(self.cfg.eval_loader, _convert="all")(self.dataset, cfg.worker_num, self._eval_batch_sampler)
 
         print_params = self.cfg.get('print_params', False)
         if print_params:
@@ -364,7 +364,7 @@ class Trainer(object):
         assert self.mode == 'train', "Model not in 'train' mode."
         Init_mark = False
         if validate:
-            self.cfg.eval_dataset = instantiate(self.cfg.eval_dataset)
+            self.eval_dataset = instantiate(self.cfg.eval_dataset)
 
         model = self.model.to(self._device)
         sync_bn = (getattr(self.cfg, 'norm_type', None) == 'sync_bn' and self.cfg.use_gpu and self._nranks > 1)
@@ -400,7 +400,7 @@ class Trainer(object):
         self.status['training_staus'] = stats.TrainingStats(self.cfg.log_iter)
 
         if self.cfg.get('print_flops', False):
-            flops_loader = instantiate(self.cfg.train_loader)(self.dataset, self.cfg.worker_num)
+            flops_loader = instantiate(self.cfg.train_loader, _convert="all")(self.dataset, self.cfg.worker_num)
             self._flops(flops_loader)
         profiler_options = self.cfg.get('profiler_options', None)
 
@@ -508,9 +508,9 @@ class Trainer(object):
                     if self.cfg.metric == 'VOC':
                         self.cfg.eval_loader['collate_batch'] = False
                     if self.cfg.metric == 'Pose3DEval':
-                        self._eval_loader = instantiate(self.cfg.eval_loader)(self._eval_dataset, self.cfg.worker_num)
+                        self._eval_loader = instantiate(self.cfg.eval_loader, _convert="all")(self._eval_dataset, self.cfg.worker_num)
                     else:
-                        self._eval_loader = instantiate(self.cfg.eval_loader)(self._eval_dataset, self.cfg.worker_num,
+                        self._eval_loader = instantiate(self.cfg.eval_loader, _convert="all")(self._eval_dataset, self.cfg.worker_num,
                                                                               self._eval_batch_sampler)
                 if validate and Init_mark == False:
                     Init_mark = True
@@ -710,7 +710,7 @@ class Trainer(object):
             os.makedirs(output_dir)
 
         self.dataset.set_slice_images(images, slice_size, overlap_ratio)
-        loader = instantiate(self.cfg.test_loader)(self.dataset, 0)
+        loader = instantiate(self.cfg.test_loader, _convert="all")(self.dataset, 0)
         imid2path = self.dataset.get_imid2path()
 
         def setup_metrics_for_loader():
@@ -874,7 +874,7 @@ class Trainer(object):
             save_threshold = 0.0
 
         self.dataset.set_images(images)
-        loader = instantiate(self.cfg.test_loader)(self.dataset, 0)
+        loader = instantiate(self.cfg.test_loader, _convert="all")(self.dataset, 0)
         imid2path = self.dataset.get_imid2path()
 
         def setup_metrics_for_loader():
@@ -1037,7 +1037,7 @@ class Trainer(object):
             os.makedirs(output_dir)
 
         self.dataset.set_images(images)
-        loader = instantiate(self.cfg.test_loader)(self.dataset, 0)
+        loader = instantiate(self.cfg.test_loader, _convert="all")(self.dataset, 0)
 
         imid2path = self.dataset.get_imid2path()
 
