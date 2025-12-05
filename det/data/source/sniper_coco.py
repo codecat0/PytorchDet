@@ -10,7 +10,7 @@ import cv2
 import json
 import copy
 import numpy as np
-from collections import Sequence
+from collections.abc import Sequence
 from loguru import logger
 
 from det.data.crop_utils.annotation_cropper import AnnoCropper
@@ -18,7 +18,7 @@ from det.data.source.coco import COCODataset
 from det.data.source.dataset import _make_dataset, _is_valid_file
 
 
-class SniperCOCODataSet(COCODataSet):
+class SniperCOCODataSet(COCODataset):
     """SniperCOCODataSet
 
     用于SNIPER方法的数据集类，通过AnnoCropper将大图像切分为小切片（chips），
