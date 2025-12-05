@@ -117,10 +117,33 @@ class ComposeCallback(object):
 class LogPrinter(Callback):
     def __init__(self, model):
         super(LogPrinter, self).__init__(model)
+    
+    def _is_main_process(self):
+        """判断是否为主进程（rank 0）或单卡模式"""
+        if not dist.is_available():
+            return True
+        if not dist.is_initialized():
+            return True
+        return dist.get_rank() == 0
+
+    def _should_log(self):
+        """判断当前进程是否应该打印日志"""
+        if not dist.is_available() or not dist.is_initialized():
+            return True  # 单卡模式：总是打印
+        
+        world_size = dist.get_world_size()
+        if world_size < 2:
+            return True  # 单卡：打印
+        
+        # 多卡：只在指定 rank 打印（默认 log_ranks 应包含 0）
+        current_rank = dist.get_rank()
+        log_ranks = getattr(self, 'log_ranks', [0])  # 默认只在 rank 0 打印
+        return current_rank in log_ranks
+
 
     def on_step_end(self, status):
         # 在单卡或指定 rank 上打印日志
-        if dist.get_world_size() < 2 or dist.get_rank() in self.log_ranks:
+        if self._should_log():
             mode = status['mode']
             if mode == 'train':
                 epoch_id = status['epoch_id']
@@ -131,7 +154,7 @@ class LogPrinter(Callback):
                 data_time = status['data_time']
 
                 epoches = self.model.cfg.epoch
-                batch_size = self.model.cfg['{}Reader'.format(mode.capitalize())]['batch_size']
+                batch_size = self.model.cfg['batch_size']
 
                 logs = training_staus.log()
                 space_fmt = ':' + str(len(str(steps_per_epoch))) + 'd'
@@ -184,10 +207,11 @@ class LogPrinter(Callback):
                 step_id = status['step_id']
                 if step_id % 100 == 0:
                     self.logger.info("Eval iter: {}".format(step_id))
+        
 
     def on_epoch_end(self, status):
         # 只在主进程（rank 0）打印汇总信息
-        if dist.get_world_size() < 2 or dist.get_rank() == 0:
+        if self._is_main_process():
             mode = status['mode']
             if mode == 'eval':
                 sample_num = status['sample_num']
@@ -407,14 +431,23 @@ class VisualDLWriter(Callback):
         self.vdl_mAP_step = 0  # mAP 记录步数
         self.vdl_image_step = 0  # 图像记录步数（每帧内）
         self.vdl_image_frame = 0  # 图像帧计数器（每10张图换一帧）
+    
+    def _is_main_process(self):
+        """判断是否为主进程（rank 0）或单卡模式"""
+        if not dist.is_available():
+            return True
+        if not dist.is_initialized():
+            return True
+        return dist.get_rank() == 0
 
     def on_step_end(self, status):
         """
         在每个训练或测试 step 结束时记录数据。
         """
+        
         mode = status['mode']
         # 仅主进程（rank 0）记录
-        if dist.get_world_size() < 2 or dist.get_rank() == 0:
+        if self._is_main_process():
             if mode == 'train':
                 # 记录训练损失
                 training_staus = status['training_staus']
@@ -451,7 +484,7 @@ class VisualDLWriter(Callback):
         在每个 epoch 结束时（评估阶段）记录 mAP 等指标。
         """
         mode = status['mode']
-        if dist.get_world_size() < 2 or dist.get_rank() == 0:
+        if self._is_main_process():
             if mode == 'eval':
                 # 遍历所有评估指标并记录 mAP
                 for metric in self.model._metrics:
