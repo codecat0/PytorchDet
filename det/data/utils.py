@@ -29,10 +29,11 @@ def default_collate_fn(batch):
     sample = batch[0]
     if isinstance(sample, np.ndarray):
         batch = np.stack(batch, axis=0)
-        return batch
-    elif isinstance(sample, numbers.Number):
-        batch = np.array(batch)
-        return batch
+        return torch.from_numpy(batch)
+    elif isinstance(sample, torch.Tensor):
+        return torch.stack(batch, dim=0)
+    elif isinstance(sample, (float, int, bool, np.number)):
+        return torch.tensor(batch, dtype=torch.float32 if isinstance(sample, (float, np.floating)) else torch.long)
     elif isinstance(sample, (str, bytes)):
         return batch
     elif isinstance(sample, Mapping):
