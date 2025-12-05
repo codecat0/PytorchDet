@@ -100,7 +100,7 @@ class DETRLoss(nn.Module):
                                                      gt_class, match_indices)
             # 使用scatter更新目标标签
             target_label_flat = target_label.reshape([-1, 1])
-            target_label_flat.scatter_(0, index.unsqueeze(1), updates.long().unsqueeze(1))
+            target_label_flat.scatter_(0, index.unsqueeze(1), updates.long())
             target_label = target_label_flat.reshape([bs, num_query_objects])
 
         if self.use_focal_loss:
@@ -135,8 +135,13 @@ class DETRLoss(nn.Module):
                     logits, target_one_hot, num_gts / num_query_objects)
         else:
             # 使用交叉熵损失
+            # Flatten to [B*N, C] and [B*N]
+            B, N, C = logits.shape
+            logits_flat = logits.view(-1, C)        
+            target_flat = target_label.view(-1)     
             loss_ = F.cross_entropy(
-                logits, target_label, weight=self.loss_coeff['class'])
+                logits_flat, target_flat, weight=self.loss_coeff['class'].float().to(logits.device))
+
 
         return {name_class: loss_}
 
@@ -168,11 +173,11 @@ class DETRLoss(nn.Module):
                                                             match_indices)
         # 计算L1损失
         loss[name_bbox] = self.loss_coeff['bbox'] * F.l1_loss(
-            src_bbox, target_bbox, reduction='sum') / num_gts
+            src_bbox, target_bbox, reduction='sum') / num_gts.to(boxes.device)
         # 计算GIOU损失
         loss[name_giou] = self.giou_loss(
             bbox_cxcywh_to_xyxy(src_bbox), bbox_cxcywh_to_xyxy(target_bbox))
-        loss[name_giou] = loss[name_giou].sum() / num_gts
+        loss[name_giou] = loss[name_giou].sum() / num_gts.to(boxes.device)
         loss[name_giou] = self.loss_coeff['giou'] * loss[name_giou]
         return loss
 
@@ -361,9 +366,8 @@ class DETRLoss(nn.Module):
         ])
         src_idx = torch.cat([src for (src, _) in match_indices])
         src_idx += (batch_idx * num_query_objects)
-
         target_assign = torch.cat([
-            torch.gather(t, 0, dst) if len(dst) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
+            t[dst.long()] if len(dst) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
             for t, (_, dst) in zip(target, match_indices)
         ])
         return src_idx, target_assign
@@ -382,11 +386,11 @@ class DETRLoss(nn.Module):
             源分配和目标分配的元组
         """
         src_assign = torch.cat([
-            torch.gather(t, 0, I) if len(I) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
+            t[I.long()] if len(I) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
             for t, (I, _) in zip(src, match_indices)
         ])
         target_assign = torch.cat([
-            torch.gather(t, 0, J) if len(J) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
+            t[J.long()]if len(J) > 0 else torch.zeros([0, t.shape[-1]], device=t.device)
             for t, (_, J) in zip(target, match_indices)
         ])
         return src_assign, target_assign
