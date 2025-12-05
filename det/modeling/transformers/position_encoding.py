@@ -57,7 +57,7 @@ class PositionEmbedding(nn.Module):
                         x_embed[:, :, -1:] + self.eps) * self.scale  # [B, H, W]
 
             # 计算正弦位置编码的频率
-            dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32) // 2
+            dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=mask.device) // 2
             dim_t = dim_t * 2  # 确保偶数索引
             dim_t = self.temperature ** (dim_t / self.num_pos_feats)  # [num_pos_feats]
 
