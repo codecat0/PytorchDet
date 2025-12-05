@@ -5,7 +5,7 @@
 @Author :CodeCat
 @Date   :2025/11/10 17:02
 """
-from collections import Sequence
+from collections.abc import Sequence
 import numpy as np
 import torch
 import torch.nn as nn
@@ -605,22 +605,18 @@ class DETRPostProcess(object):
                 scores, index = torch.topk(
                     scores, self.num_top_queries, dim=-1)
                 batch_ind = torch.arange(
-                    scores.shape[0], device=scores.device).unsqueeze(-1).repeat(
-                    1, self.num_top_queries)
-                index_2d = torch.stack([batch_ind, index], dim=-1)
-                labels = labels.gather(1, index)
-                bbox_pred = bbox_pred.gather(1, index_2d.unsqueeze(-1).expand(-1, -1, bbox_pred.size(-1)))
+                    scores.shape[0], device=scores.device).unsqueeze(-1)
+                labels = labels[batch_ind, index]
+                bbox_pred = bbox_pred[[batch_ind, index]]
         else:
             scores_flat = scores.flatten(1)
             scores, index = torch.topk(
                 scores_flat, self.num_top_queries, dim=-1)
             labels = index % self.num_classes
             index = index // self.num_classes
-            batch_ind = torch.arange(scores.shape[0], device=scores.device).unsqueeze(-1).repeat(
-                1, self.num_top_queries)
-            index_2d = torch.stack([batch_ind, index], dim=-1)
-            bbox_pred = bbox_pred.gather(1, index_2d.unsqueeze(-1).expand(-1, -1, bbox_pred.size(-1)))
-
+            batch_ind = torch.arange(scores.shape[0], device=scores.device).unsqueeze(-1)
+            bbox_pred = bbox_pred[[batch_ind, index]]
+            
         mask_pred = None
         if self.with_mask:
             assert masks is not None
