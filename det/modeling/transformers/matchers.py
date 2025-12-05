@@ -108,6 +108,7 @@ class HungarianMatcher(nn.Module):
 
         # 计算分类成本
         # 选择对应类别的概率
+        tgt_ids = tgt_ids.long()
         out_prob = out_prob.gather(1, tgt_ids.unsqueeze(1)).squeeze(1)  # [total_num_queries * total_num_gts]
 
         if self.use_focal_loss:
@@ -182,29 +183,25 @@ class HungarianMatcher(nn.Module):
             # 将掩码成本添加到总成本中
             C = C + self.matcher_coeff['mask'] * cost_mask + self.matcher_coeff['dice'] * cost_dice
 
-        # 重塑成本矩阵为批次格式
-        C = C.reshape([bs, num_queries, -1])  # [batch_size, num_queries, total_num_gts]
+        C = C.view(bs, num_queries, -1)  # reshape
+        C_list = C.chunk(bs, dim=0)      # split into list of [1, num_queries, total_gts]
+        sizes = [a.shape[0] for a in gt_bbox]  # number of gts per image
 
-        # 为每个样本执行线性求和分配
+        # Split C per image and run Hungarian matching
         indices = []
-        for i in range(bs):
-            # 获取当前样本的成本矩阵
-            cost_matrix = C[i]  # [num_queries, num_gts_for_this_sample]
-            if num_gts[i] > 0:
-                # 转换为numpy并使用scipy求解
-                cost_matrix_np = cost_matrix.detach().cpu().numpy()
-                # 使用Hungarian算法求解最优匹配
-                matched_indices = linear_sum_assignment(cost_matrix_np)
-                indices.append(matched_indices)
-            else:
-                # 如果当前样本没有ground truth，返回空匹配
-                indices.append((np.array([]), np.array([])))
+        for i, c in enumerate(C_list):
+            # c: [1, num_queries, total_gts] → squeeze to [num_queries, total_gts]
+            c = c.squeeze(0)  # [num_queries, total_gts]
+            
+            # Split cost matrix along gt dimension: [num_queries, s] for s in sizes
+            # But we only need the i-th image's gt part: first `sizes[i]` columns
+            c_i = c[:, :sizes[i]]  # shape: [num_queries, sizes[i]]
+            
+            # Convert to numpy for linear_sum_assignment
+            c_i_np = c_i.detach().cpu().numpy()
+            
+            # Solve assignment problem
+            row_idx, col_idx = linear_sum_assignment(c_i_np)
+            indices.append((row_idx, col_idx))
 
-        # 转换为PyTorch张量并返回
-        result = []
-        for i, (pred_indices, tgt_indices) in enumerate(indices):
-            pred_tensor = torch.tensor(pred_indices, dtype=torch.long, device=boxes.device)
-            tgt_tensor = torch.tensor(tgt_indices, dtype=torch.long, device=boxes.device)
-            result.append((pred_tensor, tgt_tensor))
-
-        return result
+        return [(torch.from_numpy(i).long().to(logits.device), torch.from_numpy(j).long().to(logits.device)) for i, j in indices]
