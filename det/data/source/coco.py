@@ -304,7 +304,7 @@ if __name__ == "__main__":
     
     # from omegaconf import OmegaConf
     # from hydra.utils import instantiate
-    # cfg = OmegaConf.load('config/base/dataset/coco_dataloader.yaml')
+    # cfg = OmegaConf.load('config/base/dataset/coco_dataset.yaml')
     # dataset = instantiate(cfg.dataset)
     # sample_transforms = instantiate(cfg.sample_transforms, _convert_="all")
     # dataset.parse_dataset()
