@@ -6,6 +6,7 @@
 @Date   :2025/11/17 10:07
 """
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 import sys
 from omegaconf import OmegaConf
 parent_path = os.path.abspath(os.path.join(__file__, *(['..'] * 2)))
