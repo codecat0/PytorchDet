@@ -1,6 +1,138 @@
+# Configs for training
+worker_num: 0
 num_classes: 1
+epoch: 500
+batch_size: 2
 
-# Model
+use_gpu: true
+log_iter: 20
+save_dir: output
+snapshot_epoch: 1
+print_flops: false
+print_params: false
+metric: COCO
+
+# DataSet settings
+train_sample_transforms:
+  - _target_: det.data.transform.operators.Decode
+  - _target_: det.data.transform.operators.RandomFlip
+    prob: 0.5
+  - _target_: det.data.transform.operators.RandomSelect
+    transforms1:
+      - _target_: det.data.transform.operators.RandomShortSideResize
+        short_side_sizes:
+          - 480
+          - 512
+          - 544
+          - 576
+          - 608
+          - 640
+          - 672
+          - 704
+          - 736
+          - 768
+          - 800
+        max_size: 1333
+    transforms2:
+      - _target_: det.data.transform.operators.RandomShortSideResize
+        short_side_sizes:
+          - 400
+          - 500
+          - 600
+      - _target_: det.data.transform.operators.RandomSizeCrop
+        min_size: 384
+        max_size: 600
+      - _target_: det.data.transform.operators.RandomShortSideResize
+        short_side_sizes:
+          - 480
+          - 512
+          - 544
+          - 576
+          - 608
+          - 640
+          - 672
+          - 704
+          - 736
+          - 768
+          - 800
+  - _target_: det.data.transform.operators.NormalizeImage
+    is_scale: true
+    mean:
+      - 0.485
+      - 0.456
+      - 0.406
+    std:
+      - 0.229
+      - 0.224
+      - 0.225
+  - _target_: det.data.transform.operators.NormalizeBox
+  - _target_: det.data.transform.operators.BboxXYXY2XYWH
+  - _target_: det.data.transform.operators.Permute
+
+val_sample_transforms:
+  - _target_: det.data.transform.operators.Decode
+  - _target_: det.data.transform.operators.Resize
+    target_size:
+      - 800
+      - 1333
+    keep_ratio: true
+  - _target_: det.data.transform.operators.NormalizeImage
+    is_scale: true
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  - _target_: det.data.transform.operators.Permute
+
+
+train_batch_transforms:
+  - _target_: det.data.transform.batch_operators.PadMaskBatch
+    pad_to_stride: -1
+    return_pad_mask: true
+
+train_loader:
+  _target_: det.data.reader.TrainReader
+  sample_transforms: ${train_sample_transforms}
+  batch_transforms: ${train_batch_transforms}
+  batch_size: ${batch_size}
+  shuffle: true
+  drop_last: true
+  collate_batch: false
+
+val_loader:
+  _target_: det.data.reader.EvalReader
+  sample_transforms: ${val_sample_transforms}
+  batch_size: 1
+  shuffle: false
+  drop_last: false
+
+test_loader:
+  _target_: det.data.reader.TestReader
+  sample_transforms: ${val_sample_transforms}
+  batch_size: 1
+  shuffle: false
+  drop_last: false
+
+train_dataset:
+  _target_: det.data.source.coco.COCODataset
+  dataset_dir: '/data0/helizhi/works/PytorchDet/data'
+  image_dir: 'train'
+  anno_path: 'annotations/instance_train.json'
+  data_fields: ['image', 'gt_bbox', 'gt_class', 'is_crowd']
+
+eval_dataset:
+  _target_: det.data.source.coco.COCODataset
+  dataset_dir: '/data0/helizhi/works/PytorchDet/data'
+  image_dir: 'val'
+  anno_path: 'annotations/instance_val.json'
+  allow_empty: true
+
+test_dataset:
+  _target_: det.data.source.dataset.ImageFolder
+  anno_path: 'annotations/instance_test.json'
+  dataset_dir: '/data0/helizhi/works/PytorchDet/data'
+  image_dir: 'test'
+
+
+# Model seetings
 hidden_dim: 256
 use_focal_loss: false
 with_mask: false
@@ -15,7 +147,7 @@ backbone:
   freeze_stem_only: True
 
 transformer:
-  _target_: det.modeling.transfomers.detr_transformer.DetrTransformer
+  _target_: det.modeling.transformers.detr_transformer.DETRTransformer
   num_queries: 100
   position_embed_type: 'sine'
   nhead: 8
@@ -67,3 +199,18 @@ model:
   detr_head: ${head}
   post_process: ${post_process}
   with_mask: ${with_mask}
+
+
+# Optimizer settings
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-4
+  weight_decay: 5e-5
+  betas:
+    - 0.9
+    - 0.999
+
+lr_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: ${epoch}
+  eta_min: 1e-5
