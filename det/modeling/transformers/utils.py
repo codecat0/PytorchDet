@@ -81,7 +81,7 @@ def sigmoid_focal_loss(logit, label, normalizer=1.0, alpha=0.25, gamma=2.0):
         torch.Tensor: Scalar focal loss value.
     """
     prob = F.sigmoid(logit)
-    ce_loss = F.binary_cross_entropy_with_logits(logit, label, reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(logit, label.float(), reduction="none")
     p_t = prob * label + (1 - prob) * (1 - label)
     focal_weight = (1 - p_t) ** gamma
     loss = ce_loss * focal_weight
@@ -92,7 +92,7 @@ def sigmoid_focal_loss(logit, label, normalizer=1.0, alpha=0.25, gamma=2.0):
 
     mean_loss = loss.mean(dim=1)
     sum_loss = mean_loss.sum()
-    return sum_loss / normalizer
+    return sum_loss / normalizer.to(logit.device)
 
 def inverse_sigmoid(x, eps=1e-5):
     """
