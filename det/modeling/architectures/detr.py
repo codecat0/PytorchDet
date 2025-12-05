@@ -128,13 +128,24 @@ if __name__ == '__main__':
 
     import torch
     import torch.nn.functional as F
+    from omegaconf import OmegaConf
+    from hydra.utils import instantiate
+    def deep_pin(blob, non_blocking=True):
+        if isinstance(blob, torch.Tensor):
+            return blob.cuda(non_blocking=non_blocking)
+        elif isinstance(blob, dict):
+            return {k: deep_pin(v, non_blocking) for k, v in blob.items()}
+        elif isinstance(blob, (list, tuple)):
+            return type(blob)([deep_pin(x, non_blocking) for x in blob])
+        return blob
+    
+    cfg = OmegaConf.load('config/base/dataset/coco_dataloader.yaml')
+    dataset = instantiate(cfg.dataset)
+    dataloader = instantiate(cfg.dataloader, _convert_="all")(dataset, cfg.worker_num)
 
-    # 图像尺寸
-    batch_size = 2
-    img_h, img_w = 800, 1024
     num_classes = 1
     hidden_dim = 256
-    use_focal_loss = False
+    use_focal_loss = True
     with_mask = False
 
     backbone = ResNet(
@@ -163,6 +174,7 @@ if __name__ == '__main__':
             'giou': 2,
         },
         with_mask=with_mask,
+        use_focal_loss=use_focal_loss,
     )
     loss = DETRLoss(
         num_classes=num_classes,
@@ -194,76 +206,24 @@ if __name__ == '__main__':
         detr_head=head,
         post_process=post_process,
         with_mask=with_mask,
-    )
+    ).cuda()
 
+    # model_cfg = OmegaConf.load('config/base/model/detr.yaml')
+    # model = instantiate(model_cfg.model)
+    # model = model.cuda()
 
-    # -----------------------
-    # 1. 推理模式输入
-    # -----------------------
-    def make_infer_inputs(batch_size, img_h, img_w):
-        """构建推理模式的输入字典"""
-        image = torch.randn(batch_size, 3, img_h, img_w)
-        im_shape = torch.tensor([[img_h, img_w]] * batch_size, dtype=torch.float32)
-        scale_factor = torch.ones(batch_size, 2, dtype=torch.float32)  # 假设无缩放
+    inputs = next(iter(dataloader))
+    inputs = deep_pin(inputs)
+    for k, v in inputs.items():
+        if hasattr(v, 'shape'):  
+            print(k, v.shape, type(v))
+        else:
+            print(k, v, type(v))
 
-        return {
-            'image': image,
-            'im_shape': im_shape,
-            'scale_factor': scale_factor
-        }
-
-
-    # -----------------------
-    # 2. 训练模式输入
-    # -----------------------
-    def make_train_inputs(batch_size, img_h, img_w, num_classes):
-        """构建训练模式的输入字典（含真实标签）"""
-        image = torch.randn(batch_size, 3, img_h, img_w)
-
-        # 真实边界框（格式: cxcywh，归一化到 [0,1]）
-        # 假设每张图有 3 个真实目标
-        gt_bbox = []
-        gt_class = []
-        for b in range(batch_size):
-            num_gt = 3
-            boxes = torch.rand(num_gt, 4)  # cxcywh
-            boxes[:, 2:] = boxes[:, 2:].clamp(0.1, 0.9)  # 避免过小框
-            classes = torch.randint(1, num_classes+1, (num_gt, 1))
-            gt_bbox.append(boxes)
-            gt_class.append(classes)
-
-        # 填充到相同长度（模拟 DataLoader 的 collate_fn）
-        max_gt = max(len(b) for b in gt_bbox)
-        for i in range(batch_size):
-            pad_len = max_gt - len(gt_bbox[i])
-            if pad_len > 0:
-                gt_bbox[i] = F.pad(gt_bbox[i], (0, 0, 0, pad_len))
-                gt_class[i] = F.pad(gt_class[i], (0, 0, 0, pad_len))
-
-        gt_bbox = torch.stack(gt_bbox)
-        gt_class = torch.stack(gt_class)
-
-        # 填充掩码（假设无 padding）
-        pad_mask = torch.zeros(batch_size, img_h, img_w, dtype=torch.float32)
-
-        return {
-            'image': image,
-            'gt_bbox': [bbox for bbox in gt_bbox],  # [B, max_gt, 4]
-            'gt_class': [_class for _class in gt_class],  # [B, max_gt, 1]
-            'pad_mask': pad_mask
-        }
-
-
-    # -----------------------
-    # 测试推理
-    # -----------------------
     print("=== 推理测试 ===")
     model.eval()
-    infer_inputs = make_infer_inputs(batch_size, img_h, img_w)
-    for k, v in infer_inputs.items():
-        print(k, v.shape)
     with torch.no_grad():
-        outputs = model(infer_inputs)
+        outputs = model(inputs)
     print("输出 keys:", outputs.keys())
     print("bbox shape:", outputs['bbox'].shape)
     print("bbox_num:", outputs['bbox_num'])
@@ -273,10 +233,6 @@ if __name__ == '__main__':
     # -----------------------
     print("\n=== 训练测试 ===")
     model.train()
-    train_inputs = make_train_inputs(batch_size, img_h, img_w, num_classes)
-    for k, v in train_inputs.items():
-        if hasattr(v, 'shape'):
-            print(k, v.shape)
-    losses = model(train_inputs)
+    losses = model(inputs)
     print("损失 keys:", losses.keys())
     print("总 loss:", losses['loss'].item())
